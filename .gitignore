@@ -61,6 +61,7 @@ target/
 *.iml
 *.ipr
 *.iws
+logs
 
 # Gradle
 .gradle/
