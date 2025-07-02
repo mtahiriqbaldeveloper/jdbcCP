@@ -2,18 +2,18 @@ import api.EntityChecker;
 import api.EntityFactory;
 import api.EntityReleaser;
 import api.NoOpEntityReleaser;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import java.util.stream.IntStream;
 import java.util.stream.StreamSupport;
 
 public class EntityPool<T> {
-    private static final Logger log = Logger.getLogger(EntityPool.class.getName());
+    private static final Logger log = LoggerFactory.getLogger(EntityPool.class);
     private static final int DEFAULT_INITIAL_POOL_SIZE = 0;
     private static final int DEFAULT_MAX_POOL_SIZE = 0;
     private static final int DEFAULT_PRIORITY_POOL_SIZE = 0;
@@ -32,24 +32,11 @@ public class EntityPool<T> {
     private final AtomicBoolean close = new AtomicBoolean();
     private EntityReleaser<? super T> releaser;
     // Leak detection fields
-    private  ConcurrentHashMap<T, CheckoutInfo> checkedOutEntities = new ConcurrentHashMap<>();
-    private  long leakDetectionThreshold;
-    private  boolean leakDetectionEnabled;
-    private  ScheduledExecutorService leakDetector;
-    // Inner class to track checkout information
-    private static class CheckoutInfo {
-        final long checkoutTime;
-        final String threadName;
-        final StackTraceElement[] stackTrace;
-        volatile boolean leakReported;
+    private ConcurrentHashMap<T, CheckoutInfo> checkedOutEntities = new ConcurrentHashMap<>();
+    private long leakDetectionThreshold;
+    private boolean leakDetectionEnabled;
+    private ScheduledExecutorService leakDetector;
 
-        CheckoutInfo() {
-            this.checkoutTime = System.currentTimeMillis();
-            this.threadName = Thread.currentThread().getName();
-            this.stackTrace = Thread.currentThread().getStackTrace();
-            this.leakReported = false;
-        }
-    }
     public EntityPool(Collection<EntityChecker<? super T>> checkers, EntityFactory<T> factory, EntityReleaser<? super T> releaser,
                       boolean parallelCreation, int maxSize, int prioritySize, long defaultCheckoutTime, int initialSize) throws IllegalArgumentException {
         this.checkers = Collections.unmodifiableCollection(checkers);
@@ -106,15 +93,13 @@ public class EntityPool<T> {
             return;
         }
         if (entities.size() < initSize) {
-            log.warning(String.format("Pool initialization: requested %d entities, created %d",
-                    initSize, entities.size()));
+            log.error("Pool initialization: requested {} entities, created {}", initSize, entities.size());
         }
         doRelease(entities, String.format("inability to create necessary number of manage entities during entity pool initialization " +
                 "(required %d, created %d)", initSize, entities.size()));
         throw new IllegalStateException(String.format("can't create necessary number of required manage entities within the entity pool " +
                 "(required %d, actually created %d). used the follwoing entity factory: %s", initSize, entities.size(), factory));
     }
-
 
     private void createSingleEntity(int number, List<T> entities) {
         T entity;
@@ -141,8 +126,8 @@ public class EntityPool<T> {
         try {
             this.releaser.release(entity);
         } catch (Exception var) {
-            log.warning(var.getMessage());
-            log.warning(String.format("unexpected expection occured on attempt to release entity '%s' via '%s'. The entity was released due to %s ", entity, this.releaser, reason));
+            log.error(var.getMessage());
+            log.error("unexpected expection occured on attempt to release entity '{}' via '{}'. The entity was released due to {} ", entity, this.releaser, reason);
         }
     }
 
@@ -155,7 +140,7 @@ public class EntityPool<T> {
             throw new IllegalStateException(String.format("Can't retrieve entity from the pool '%s'. Reason the pool is closed", this));
         } else {
             long start = System.currentTimeMillis();
-            log.info("waiting threads" + start);
+            log.info("waiting threads {} ", start);
             try {
                 return this.getEntityImpl(timout);
             } finally {
@@ -193,23 +178,23 @@ public class EntityPool<T> {
                 Exception e = var1;
                 this.decrementCurrentSize();
                 if (e instanceof IllegalStateException) {
-                    log.warning("failed to create new entity, tried following entity factory : " + this.factory);
+                    log.error("failed to create new entity, tried following entity factory : {}", this.factory);
                 } else {
-                    log.warning(String.format("Failed to create entity using the factory '%s' factory has thrown unexpected exception '%s' ", this.factory, e));
+                    log.error("Failed to create entity using the factory {} factory has thrown unexpected exception {} ", this.factory, e.getMessage());
                 }
                 if (timout > 0L && endRequestTime > System.currentTimeMillis()) {
                     continue;
                 }
             }
             if (entity == null) {
-                log.warning(String.format("Entity factory '%s' failed to create new manage entity - null is returned", this.factory));
+                log.error("Entity factory '{}' failed to create new manage entity - null is returned", this.factory);
                 decrementCurrentSize();
                 continue;
             }
             return entity;
         }
-        log.warning(String.format("Potential live lock on manage entity creation via factory '%s'!!!! " +
-                "Failed to create new entity in %d attempts", factory, maxAttemptNumber));
+        log.error("Potential live lock on manage entity creation via factory '{}'!!!! " +
+                "Failed to create new entity in {} attempts", factory, maxAttemptNumber);
 
         return null;
     }
@@ -301,9 +286,7 @@ public class EntityPool<T> {
             try {
                 validEntity = checker.check(entity);
             } catch (Exception e) {
-                log.log(Level.WARNING, String.format(
-                        "Unexpected exception occurred on attempt to check if entity '%s' is still alive via '%s'",
-                        entity, checker), e);
+                log.error("Unexpected exception occurred on attempt to check if entity '{}' is still alive via '{}'", entity, checker, e);
             }
             if (validEntity) {
                 continue;
@@ -312,7 +295,6 @@ public class EntityPool<T> {
         }
         return true;
     }
-
 
     /**
      * Checks if it should be evicted (either pool size exceeded or failed validation)
@@ -343,6 +325,7 @@ public class EntityPool<T> {
         }
         log.info("remember stats");
     }
+
     private void detectLeaks() {
         if (!leakDetectionEnabled) {
             return;
@@ -371,7 +354,7 @@ public class EntityPool<T> {
                         stackTrace.append("  at ").append(element.toString()).append("\n");
                     }
 
-                    log.warning(stackTrace.toString());
+                    log.error(stackTrace.toString());
                     info.leakReported = true;
                 }
 
@@ -384,13 +367,14 @@ public class EntityPool<T> {
 
         // Force release entities that have been leaked for too long
         for (T leakedEntity : leakedEntities) {
-            log.warning(String.format("Force releasing leaked entity: %s", leakedEntity));
+            log.error("Force releasing leaked entity: {}", leakedEntity);
             checkedOutEntities.remove(leakedEntity);
             doRelease(leakedEntity, "force release due to prolonged leak");
             decrementCurrentSize();
             entityPermits.release();
         }
     }
+
     public void debugPoolState() {
         System.out.println("=== Pool Debug Info ===");
         System.out.println("Current size: " + getCurrentSize());
@@ -399,7 +383,23 @@ public class EntityPool<T> {
         System.out.println("Available permits: " + entityPermits.availablePermits());
     }
 
+    // Inner class to track checkout information
+    private static class CheckoutInfo {
+        final long checkoutTime;
+        final String threadName;
+        final StackTraceElement[] stackTrace;
+        volatile boolean leakReported;
+
+        CheckoutInfo() {
+            this.checkoutTime = System.currentTimeMillis();
+            this.threadName = Thread.currentThread().getName();
+            this.stackTrace = Thread.currentThread().getStackTrace();
+            this.leakReported = false;
+        }
+    }
+
     public static final class EntityPoolBuilder<T> {
+        private final Collection<EntityChecker<? super T>> checkers = new ArrayList<>();
         private int initialSize = DEFAULT_INITIAL_POOL_SIZE;
         private int maxSize = DEFAULT_MAX_POOL_SIZE;
         private int prioritySize = DEFAULT_PRIORITY_POOL_SIZE;
@@ -407,7 +407,6 @@ public class EntityPool<T> {
         private EntityFactory<T> factory;
         private boolean parallelCreation;
         private EntityReleaser<? super T> releaser = new NoOpEntityReleaser<>();
-        private final Collection<EntityChecker<? super T>> checkers = new ArrayList<>();
 
         private EntityPoolBuilder() {
         }
@@ -473,7 +472,7 @@ public class EntityPool<T> {
                 throw new IllegalArgumentException(String.format("can't create entitypool with null entity releaser (provided entity factory is %s)", this.factory));
             } else {
                 if (this.initialSize > this.maxSize) {
-                    EntityPool.log.warning(String.format("Initial pool size %d is greater than max pool size %d. Max pool size value will be used instead. check config", this.initialSize, this.maxSize));
+                    log.error("Initial pool size {} is greater than max pool size {}. Max pool size value will be used instead. check config", this.initialSize, this.maxSize);
                     this.initialSize = this.maxSize;
                 }
                 return new EntityPool<>(checkers, factory, releaser, parallelCreation,

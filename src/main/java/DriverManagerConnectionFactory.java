@@ -1,14 +1,16 @@
 
 import api.EntityFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Properties;
-import java.util.logging.Logger;
+
 
 public class DriverManagerConnectionFactory implements EntityFactory<Connection> {
-    Logger log = Logger.getLogger(DriverManagerConnectionFactory.class.getName());
+    Logger log = LoggerFactory.getLogger(DriverManagerConnectionFactory.class.getName());
     public static final String USER_KEY = "ROOT";
     public static final String PASSWORD_KEY = "";
     private final Properties properties;

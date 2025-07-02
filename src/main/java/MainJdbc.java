@@ -1,12 +1,14 @@
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.Properties;
-import java.util.logging.Logger;
 
 public class MainJdbc {
-    private final static Logger log = Logger.getLogger(MainJdbc.class.getName());
+    private final static Logger log = LoggerFactory.getLogger(MainJdbc.class);
     private final ThreadGroup jdbcThreadGroup = new ThreadGroup("jdbc-thread-group");
 
     public static void main(String[] args) throws IllegalAccessException, SQLException {
@@ -30,10 +32,10 @@ public class MainJdbc {
 
             for (int i = 0; i < 5; i++) {
                 int poolSize = build.getPoolSize();
-                log.info("this is the pool size :" + poolSize);
+                log.info("this is the pool size :{}", poolSize);
                 Connection connection = dataSource.getConnection();
                 mainJdbc.executeStatement(connection);
-                System.out.println("Connection used: " + connection.hashCode());
+                log.info("Connection used: {}", connection.hashCode());
             }
         }
     }
@@ -45,7 +47,7 @@ public class MainJdbc {
             insert.setString(1, "moin");
             insert.setString(2, "moin@example.com");
             int rows = insert.executeUpdate();
-            System.out.println("Inserted rows: " + rows);
+            log.info("Inserted rows: {}", rows);
         } catch (SQLException e) {
             e.printStackTrace();
         }
