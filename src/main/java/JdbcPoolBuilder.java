@@ -1,6 +1,8 @@
 import api.EntityChecker;
 import api.EntityConverter;
 import api.EntityFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.management.MBeanServer;
 import java.lang.management.ManagementFactory;
@@ -9,14 +11,15 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
-import java.util.logging.Logger;
+
 
 public class JdbcPoolBuilder {
-    private static final Logger log = Logger.getLogger(JdbcPoolBuilder.class.getName());
+    private static final Logger log = LoggerFactory.getLogger(JdbcPoolBuilder.class);
     private final List<EntityConverter<Connection, Connection>> connectionConverters = new ArrayList<>();
     private final Collection<ApplicationStatusProvider> statusProviders = new ArrayList<>();
     private final DefaultConnectionChecker defaultConnectionChecker;
     private final EntityPool.EntityPoolBuilder<PoolConnection> entityPoolBuilder;
+    private final Properties properties;
     private String url;
     private String password;
     private String login;
@@ -37,7 +40,6 @@ public class JdbcPoolBuilder {
     private long aggregationPeriod;
     private boolean checkConnectionThreadOwnerShip;
     private boolean useLogModeToCheckThreadOwnerShip;
-    private final Properties properties;
 
     @SuppressWarnings("unchecked")
     public JdbcPoolBuilder(Properties properties) {
@@ -133,7 +135,8 @@ public class JdbcPoolBuilder {
     public EntityPool.EntityPoolBuilder<PoolConnection> getEntityPoolBuilder() {
         return entityPoolBuilder;
     }
-    public void setDefaultCheckoutTime(long timeout){
+
+    public void setDefaultCheckoutTime(long timeout) {
         entityPoolBuilder.defaultCheckoutTime(timeout);
     }
 
@@ -172,7 +175,7 @@ public class JdbcPoolBuilder {
     private void configurePoolRefresh(final EntityPool<PoolConnection> pool) {
         if (this.idleConnectionCheckPeriod > 0L) {
             if (!pool.isCheckersConfigured()) {
-                log.warning("idle connection check period is defined but no checkers are configured! no periodic check will be performed");
+                log.error("idle connection check period is defined but no checkers are configured! no periodic check will be performed");
             }
             if (this.threadGroup == null) {
                 this.threadGroup = Thread.currentThread().getThreadGroup();
@@ -187,7 +190,7 @@ public class JdbcPoolBuilder {
                                 Thread.sleep(timeToSleep);
                             } catch (InterruptedException var6) {
                                 String message = String.format("jdbcPoolIdleConnectionCheckThread is interrupted! '%s'", var6);
-                                log.warning(message);
+                                log.error(message);
                                 Thread.currentThread().interrupt();
                                 return;
                             }
@@ -239,7 +242,7 @@ public class JdbcPoolBuilder {
             return createJdbcConnectionFactory();
         }
         if (isJdbcParamsEmpty()) {
-            log.warning("some parameters are missing");
+            log.error("some parameters are missing");
         }
         return connectionFactory;
     }
