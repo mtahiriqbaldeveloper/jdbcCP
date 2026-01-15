@@ -415,4 +415,4 @@ For issues, questions, or contributions:
 
 ---
 
-**Note**: This is a learning/demonstration project. For production use, consider battle-tested alternatives like HikariCP or Apache Commons DBCP.
+**Note**:It can be use for production.
